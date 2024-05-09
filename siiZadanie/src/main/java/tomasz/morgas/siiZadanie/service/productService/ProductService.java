@@ -1,4 +1,4 @@
-package tomasz.morgas.siiZadanie.service;
+package tomasz.morgas.siiZadanie.service.productService;
 
 import tomasz.morgas.siiZadanie.entity.Product;
 

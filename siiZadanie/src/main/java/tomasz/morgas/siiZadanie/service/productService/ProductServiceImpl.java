@@ -1,4 +1,4 @@
-package tomasz.morgas.siiZadanie.service;
+package tomasz.morgas.siiZadanie.service.productService;
 
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
