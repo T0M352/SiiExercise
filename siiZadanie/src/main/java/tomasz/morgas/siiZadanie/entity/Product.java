@@ -10,7 +10,7 @@ public class Product{
     @Column(name="productName")
     private String name;
     @Column(name="description")
-    private String description; // opcjonalny
+    private String description;
     @Column(name="regular_price")
     private double regularPrice;
 

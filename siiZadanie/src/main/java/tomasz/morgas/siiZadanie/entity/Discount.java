@@ -4,6 +4,9 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.hibernate.validator.constraints.Range;
 
 import java.time.LocalDate;
 
@@ -12,7 +15,14 @@ import java.time.LocalDate;
 public class Discount {
     @Id
     @Column(name="promo_code")
+    @Size(min = 3, max = 24, message = "Code should be 3-24 characters long")
+    @Pattern(regexp = "^[a-zA-Z0-9]*$", message = "Code should contain only alphanumeric characters")
     private String promoCode;
+
+    @Column(name="type")
+    @Range(min = 0, max = 1, message = "Type of discountcode should be 0 or 1")
+    private int type;
+
 
     @Column(name="expiration_date")
     private LocalDate expirationDate;
@@ -29,16 +39,25 @@ public class Discount {
     @Column(name="current_usages")
     private int currentUsages;
 
-    public Discount(String promoCode, LocalDate expirationDate, double discountAmount, String currency, int maxUsages) {
-        this.promoCode = promoCode;
+
+    public Discount(LocalDate expirationDate, double discountAmount, String currency, int maxUsages, int currentUsages, int type) {
         this.expirationDate = expirationDate;
         this.discountAmount = discountAmount;
         this.currency = currency;
         this.maxUsages = maxUsages;
-        this.currentUsages = 0;
+        this.currentUsages = currentUsages;
+        this.type = type;
     }
 
     public Discount() {
+    }
+
+    public int getType() {
+        return type;
+    }
+
+    public void setType(int type) {
+        this.type = type;
     }
 
     public String getPromoCode() {

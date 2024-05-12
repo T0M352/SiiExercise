@@ -1,8 +1,11 @@
 package tomasz.morgas.siiZadanie.restController;
 
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import tomasz.morgas.siiZadanie.entity.*;
 import tomasz.morgas.siiZadanie.exceptions.*;
@@ -39,7 +42,7 @@ public class RestController {
     public Product addProduct(@RequestBody Product product){
         Product productToFind = productService.findByName(product.getName());
         if(productToFind != null){
-            throw new AlreadyExistException("Produkt o nazwie: " + product.getName() + " już istnieje");
+            throw new AlreadyExistException("Product: " + product.getName() + " not found");
         }
         Product dbProduct = productService.save(product);
         return dbProduct;
@@ -59,7 +62,7 @@ public class RestController {
     public Product updateProduct(@RequestBody Product product) {
         Product productToFind = productService.findByName(product.getName());
         if(productToFind == null){
-            throw new NotFoundException("Produkt o nazwie: " + product.getName() + " nie istnieje");
+            throw new NotFoundException("Product: " + product.getName() + " not found");
         }
         Product dbProduct = productService.save(product);
         return dbProduct;
@@ -67,18 +70,30 @@ public class RestController {
 
     //4. Create a new promo code.
     @PostMapping("/createPromocode")
-    public Discount createPromocode(@RequestBody Discount discount){
+    public Discount createPromocode(@Valid @RequestBody Discount discount, BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            String errorMessage = bindingResult.getAllErrors().stream()
+                    .map(DefaultMessageSourceResolvable::getDefaultMessage)
+                    .collect(Collectors.joining("; "));
+            throw new WrongPromocodeException(errorMessage);
+        }
+
         Discount discountToFind = discountService.getDetails(discount.getPromoCode());
-        if(discountToFind != null){
-            throw new AlreadyExistException("Ten promokod juz istnieje");
+        if (discountToFind != null) {
+            throw new AlreadyExistException("Promo code already exists");
         }
-        String promoCode = discount.getPromoCode();
-        if(promoCode.length() < 3 || promoCode.length() > 24 || containsWhitespaces(promoCode)){ //TODO tutaj powinien byc bindingResult
-            throw new WrongPromocodeException("Promokod powinien miec od 3 do 24 znaków i nie posiadać znaków białych");
+
+        if (discount.getType() != 0 && (discount.getDiscountAmount() < 0 || discount.getDiscountAmount() > 100)) {
+            throw new WrongPromocodeException("The amount of discount in this type is in percentage, so it should be between 1 and 100.");
         }
+
         Discount dbDiscount = discountService.createDiscount(discount);
         return dbDiscount;
     }
+
+
+
+
 
     //5. Get all promo codes.
     @GetMapping("/getAllCodes")
@@ -93,7 +108,7 @@ public class RestController {
     public Discount getPromocodeDetails(@PathVariable String code){
         Discount discount = discountService.getDetails(code);
         if(discount == null){
-            throw new NotFoundException("Ten kod nie istnieje");
+            throw new NotFoundException("Promo code not found");
         }
         return discount;
     }
@@ -103,59 +118,66 @@ public class RestController {
     public DiscountResponse calculateDiscount(@RequestBody DiscountRequest discountRequest){
         Discount discount = discountService.getDetails(discountRequest.getPromoCode());
         Product product = productService.findByName(discountRequest.getProductName());
-        double discountPrice;
+        double discountPrice = 0;
         if(discount == null){
-            throw new NotFoundException("Ten promokod nie istnieje");
+            throw new NotFoundException("Promo code not found");
         }
         if(product == null){
-            throw new NotFoundException("Ten produkt nie istnieje");
+            throw new NotFoundException("Product not found");
         }
         if(discount.getExpirationDate().isBefore(LocalDate.now())){
-            return new DiscountResponse("Data waznosci uplynela", product.getRegularPrice());
+            return new DiscountResponse("Expiration date has expired", product.getRegularPrice());
         }
         if(!discount.getCurrency().equals(product.getCurrency())){
-            return new DiscountResponse("Waluty sie nie zgadzaja", product.getRegularPrice());
+            return new DiscountResponse("Currencies doesnt match", product.getRegularPrice());
         }
         if(discount.getMaxUsages() <= discount.getCurrentUsages()){
-            return new DiscountResponse("Przekroczono ilość użyć", product.getRegularPrice());
+            return new DiscountResponse("Number of uses exceeded", product.getRegularPrice());
         }
-        discountPrice = product.getRegularPrice() - discount.getDiscountAmount();
+
+        if(discount.getType() == 0){
+            discountPrice = product.getRegularPrice() - discount.getDiscountAmount();
+        }else{
+            discountPrice = product.getRegularPrice() - (product.getRegularPrice() * discount.getDiscountAmount() / 100);
+        }
         if(discountPrice < 0)
             discountPrice = 0;
 
 
-        return new DiscountResponse("Promocja moze zostac zastosowana", discountPrice);
+        return new DiscountResponse("The discount can be applied", discountPrice);
     }
 
     //8. Simulate purchase
     @PostMapping("/purchase")
     public String purchaseProduct(@RequestBody DiscountRequest discountRequest){
-
-
         Discount discount = discountService.getDetails(discountRequest.getPromoCode());
         Product product = productService.findByName(discountRequest.getProductName());
         if(product == null){
-            throw new NotFoundException("Ten produkt nie istnieje");
+            throw new NotFoundException("Product not found");
         }
         if(discountRequest.getPromoCode() != null){
             if(discount == null){
-                throw new NotFoundException("Ten promokod nie istnieje");
+                throw new NotFoundException("Promo code not found");
             }
             if(discount.getExpirationDate().isBefore(LocalDate.now())){
-                return "Data waznosci uplynela";
+                return "Expiration date has expired";
             }
             if(!discount.getCurrency().equals(product.getCurrency())){
-                return "Waluty sie nie zgadzaja";
+                return "Currencies doesnt match";
             }
             if(discount.getMaxUsages() <= discount.getCurrentUsages()){
-                return "Przekroczono ilość użyć";
+                return "Number of uses exceeded";
             }
         }
         PurchaseInformation purchaseInformation = new PurchaseInformation(LocalDate.now(), product.getRegularPrice(), 0, product.getName(), product.getCurrency());
 
         double discountPrice = product.getRegularPrice();
         if(discount!=null){
-            discountPrice = product.getRegularPrice() - discount.getDiscountAmount();
+            if(discount.getType() == 0){
+                discountPrice = product.getRegularPrice() - discount.getDiscountAmount();
+            }else{
+                discountPrice = product.getRegularPrice() - (product.getRegularPrice() * discount.getDiscountAmount() / 100);
+            }
             discount.setCurrentUsages(discount.getCurrentUsages()+1);
             discountService.createDiscount(discount);
             if(discountPrice < 0)
@@ -164,7 +186,7 @@ public class RestController {
             purchaseInformationService.save(purchaseInformation);
         }
 
-        return "Produkt zakupiony prawidłowo";
+        return "Product purchased successfully";
     }
 
     //9. [Optional] A sales report: number of purchases and total value by currency (see below)
